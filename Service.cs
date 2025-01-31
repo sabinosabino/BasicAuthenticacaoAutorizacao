@@ -120,9 +120,25 @@ namespace LibLogin
             END;";
             await _db.GetConnection().ExecuteAsync(sql);
             #endregion
+
+            #region alteracaoAutencacao
+            sql = @"
+                SELECT COUNT(*) FROM pragma_table_info('Autenticacao') 
+                WHERE name = 'Ip';
+            ";
+
+            if(await _db.GetConnection().QuerySingleAsync<int>(sql) == 0)
+            {
+                await _db.GetConnection().ExecuteAsync("ALTER TABLE Autenticacao ADD COLUMN Ip TEXT;");
+            }
+
+#endregion
         }
-        public async Task<T> Registrar<T>(string id, string usuarioId, string usuario, string nome, string email, string grupoId, string empresaId)
+        public async Task<T> Registrar<T>(string id, string usuarioId, string usuario, string nome, string email, string grupoId, string empresaId, HttpContext context)
         {
+            string ip = context.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+                    ?? context.Connection.RemoteIpAddress?.ToString();
+
             var user = new
             {
                 UsuarioId = usuarioId,
@@ -133,30 +149,37 @@ namespace LibLogin
                 EmpresaId = empresaId,
                 DataHora = DateTime.Now,
                 Token = Guid.NewGuid().ToString(),
-                Validade = DateTime.Now.AddHours(timeToken)
+                Validade = DateTime.Now.AddHours(timeToken),
+                Ip = ip
             };
             var list = await _db.GetConnection().QueryAsync<T>("SELECT * FROM Autenticacao WHERE UsuarioId = @UsuarioId and EmpresaId=@EmpresaId", new { user.UsuarioId, user.EmpresaId });
             if (list.Count() > 0)
                 await _db.GetConnection().ExecuteAsync("Delete from Autenticacao WHERE UsuarioId = @UsuarioId and EmpresaId=@EmpresaId", new { user.UsuarioId, user.EmpresaId });
 
-            await _db.GetConnection().ExecuteAsync("INSERT INTO Autenticacao (UsuarioId, Usuario, Nome, Email, GrupoId, EmpresaId, DataHora, Token, Validade) VALUES (@UsuarioId, @Usuario, @Nome, @Email, @GrupoId, @EmpresaId, @DataHora, @Token, @Validade)", user);
+            await _db.GetConnection().ExecuteAsync("INSERT INTO Autenticacao (UsuarioId, Usuario, Nome, Email, GrupoId, EmpresaId, DataHora, Token, Validade,Ip) VALUES (@UsuarioId, @Usuario, @Nome, @Email, @GrupoId, @EmpresaId, @DataHora, @Token, @Validade,@Ip)", user);
 
             return await _db.GetConnection().QueryFirstAsync<T>("SELECT * FROM Autenticacao Where Id=(SELECT MAX(Id) FROM Autenticacao)");
         }
 
-        public async Task<bool> Autorizado<T>(string token)
+        public async Task<bool> Autorizado<T>(string token, HttpContext context)
         {
+            string ip = context.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+                    ?? context.Connection.RemoteIpAddress?.ToString();
 
-            var m = await _db.GetConnection().QueryFirstOrDefaultAsync<T>("SELECT * FROM Autenticacao WHERE Token = @Token And Validade>@Data", new { Token = token, Data=DateTime.Now });
+            var m = await _db.GetConnection().QueryFirstOrDefaultAsync<T>("SELECT * FROM Autenticacao WHERE Ip=@Ip and Token = @Token And Validade>@Data", new { Token = token, Data=DateTime.Now, Ip=ip });
 
             if(m!=null)
                 return true;
             return false;
         }
-        public async Task<dynamic> RefreshToken(string token){
-            var m = await _db.GetConnection().QueryFirstOrDefaultAsync("SELECT * FROM Autenticacao WHERE Token = @Token", new { Token = token });
+        public async Task<dynamic> RefreshToken(string token, HttpContext context){
+
+            string ip = context.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+                ?? context.Connection.RemoteIpAddress?.ToString();
+
+            var m = await _db.GetConnection().QueryFirstOrDefaultAsync("SELECT * FROM Autenticacao WHERE Token = @Token and Ip=@Ip", new { Token = token, Ip=ip });
             var user = new {
-                 UsuarioId = m.UsuarioId,
+                UsuarioId = m.UsuarioId,
                 Usuario = m.Usuario,
                 Nome = m.Nome,
                 Email = m.Email,
@@ -164,10 +187,11 @@ namespace LibLogin
                 EmpresaId = m.EmpresaId,
                 DataHora = DateTime.Now,
                 Token = Guid.NewGuid().ToString(),
-                Validade = DateTime.Now.AddHours(timeToken)
+                Validade = DateTime.Now.AddHours(timeToken),
+                ip = ip
             };
             await _db.GetConnection().ExecuteAsync("Delete from Autenticacao WHERE Token = @Token", new { Token = token });
-            await _db.GetConnection().ExecuteAsync("INSERT INTO Autenticacao (UsuarioId, Usuario, Nome, Email, GrupoId, EmpresaId, DataHora, Token, Validade) VALUES (@UsuarioId, @Usuario, @Nome, @Email, @GrupoId, @EmpresaId, @DataHora, @Token, @Validade)", user);
+            await _db.GetConnection().ExecuteAsync("INSERT INTO Autenticacao (UsuarioId, Usuario, Nome, Email, GrupoId, EmpresaId, DataHora, Token, Validade,Ip) VALUES (@UsuarioId, @Usuario, @Nome, @Email, @GrupoId, @EmpresaId, @DataHora, @Token, @Validade,@Ip)", user);
             return new{token=user.Token,Validade=user.Validade};
         }
 
@@ -176,6 +200,4 @@ namespace LibLogin
             await _db.GetConnection().ExecuteAsync("Delete from Autenticacao WHERE Token = @Token", new { Token = token });
         }
     }
-
-    
 }
