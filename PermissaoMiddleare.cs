@@ -15,7 +15,10 @@ public class PermissaoAttribute : TypeFilterAttribute
         public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
         {
             var rota = context.HttpContext.Request.Path.Value;
-
+            //ip direto conexão
+            string ip = context.HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+                ?? context.HttpContext.Connection.RemoteIpAddress?.ToString();
+           
             // Verificar se a rota é de um arquivo
             if (IsFileRequest(rota))
             {
@@ -33,7 +36,7 @@ public class PermissaoAttribute : TypeFilterAttribute
 
             string token = context.HttpContext.Request.Headers["token"];
             var service = new Service();
-            var autorizado = await service.Autorizado<dynamic>(token);
+            var autorizado = await service.Autorizado<dynamic>(token,context.HttpContext);
             if(!autorizado)
             {
                 context.Result = new UnauthorizedResult();
