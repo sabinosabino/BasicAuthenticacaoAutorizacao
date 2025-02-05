@@ -2,7 +2,6 @@ using LibLogin;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using System.Security.Claims;
-using testedxdd;
 
 public class PermissaoAttribute : TypeFilterAttribute
 {
@@ -35,7 +34,7 @@ public class PermissaoAttribute : TypeFilterAttribute
 
 
             string token = context.HttpContext.Request.Headers["token"];
-            var service = new Service();
+            var service = ServiceStatic.GetService();
             var autorizado = await service.Autorizado<dynamic>(token,context.HttpContext);
             if(!autorizado)
             {
