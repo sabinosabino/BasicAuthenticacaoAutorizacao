@@ -226,6 +226,10 @@ namespace LibLogin
         public DateTime Validade { get; set; }
         public string Ip { get; set; }
 
+        public UserRegister()
+        {
+            
+        }
         public UserRegister(int usuarioId, string usuario, string nome, string email, int grupoId, int empresaId, int timeToken, string ip)
         {
             UsuarioId = usuarioId;
