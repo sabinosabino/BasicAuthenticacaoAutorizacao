@@ -17,7 +17,7 @@ public class PermissaoAttribute : TypeFilterAttribute
             //ip direto conexão
             string ip = context.HttpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
                 ?? context.HttpContext.Connection.RemoteIpAddress?.ToString();
-           
+
             // Verificar se a rota é de um arquivo
             if (IsFileRequest(rota))
             {
@@ -26,7 +26,7 @@ public class PermissaoAttribute : TypeFilterAttribute
             }
 
             // Verificar se o usuário está autenticado
-            if(!context.HttpContext.Request.Headers.ContainsKey("token"))
+            if (!context.HttpContext.Request.Headers.ContainsKey("token"))
             {
                 context.Result = new UnauthorizedResult();
                 return;
@@ -35,15 +35,21 @@ public class PermissaoAttribute : TypeFilterAttribute
 
             string token = context.HttpContext.Request.Headers["token"];
             var service = ServiceStatic.GetService();
-            var autorizado = await service.Autorizado<dynamic>(token,context.HttpContext);
-            if(!autorizado)
+            var autorizado = await service.Autenticado<dynamic>(token, context.HttpContext);
+            if (!autorizado)
             {
                 context.Result = new UnauthorizedResult();
                 return;
             }
 
             //depois verificar se o usuário tem permissão para acessar a rota
+            var auth = await service.Autorizado(rota, token);
 
+            if (!auth)
+            {
+                context.Result = new UnauthorizedResult();
+                return;
+            }
 
             await next();
         }
