@@ -11,10 +11,12 @@ namespace LibLogin
         private DbContext _db;
         private IDbConnection _conn;
 
-        private int timeToken=1;
-        public Service()
+        private bool _controlaIp;
+        private int timeToken = 1;
+        public Service(bool controlaIp = false)
         {
             _db = new BaseDapper.DbContext(new SQLiteConnection("Data Source=session.db;"));
+            _controlaIp = controlaIp;
         }
         public void Init()
         {
@@ -127,17 +129,19 @@ namespace LibLogin
                 WHERE name = 'Ip';
             ";
 
-            if(await _db.GetConnection().QuerySingleAsync<int>(sql) == 0)
+            if (await _db.GetConnection().QuerySingleAsync<int>(sql) == 0)
             {
                 await _db.GetConnection().ExecuteAsync("ALTER TABLE Autenticacao ADD COLUMN Ip TEXT;");
             }
 
-#endregion
+            #endregion
         }
         public async Task<T> Registrar<T>(string id, string usuarioId, string usuario, string nome, string email, string grupoId, string empresaId, HttpContext context)
         {
             string ip = context.Request.Headers["X-Forwarded-For"].FirstOrDefault()
                     ?? context.Connection.RemoteIpAddress?.ToString();
+            if (!_controlaIp)
+                ip = "";
 
             var user = new
             {
@@ -166,19 +170,27 @@ namespace LibLogin
             string ip = context.Request.Headers["X-Forwarded-For"].FirstOrDefault()
                     ?? context.Connection.RemoteIpAddress?.ToString();
 
-            var m = await _db.GetConnection().QueryFirstOrDefaultAsync<T>("SELECT * FROM Autenticacao WHERE Ip=@Ip and Token = @Token And Validade>@Data", new { Token = token, Data=DateTime.Now, Ip=ip });
+            if (!_controlaIp)
+                ip = "";
 
-            if(m!=null)
+            var m = await _db.GetConnection().QueryFirstOrDefaultAsync<T>("SELECT * FROM Autenticacao WHERE Ip=@Ip and Token = @Token And Validade>@Data", new { Token = token, Data = DateTime.Now, Ip = ip });
+
+            if (m != null)
                 return true;
             return false;
         }
-        public async Task<dynamic> RefreshToken(string token, HttpContext context){
+        public async Task<dynamic> RefreshToken(string token, HttpContext context)
+        {
 
             string ip = context.Request.Headers["X-Forwarded-For"].FirstOrDefault()
                 ?? context.Connection.RemoteIpAddress?.ToString();
 
-            var m = await _db.GetConnection().QueryFirstOrDefaultAsync("SELECT * FROM Autenticacao WHERE Token = @Token and Ip=@Ip", new { Token = token, Ip=ip });
-            var user = new {
+            if (!_controlaIp)
+                ip = "";
+
+            var m = await _db.GetConnection().QueryFirstOrDefaultAsync("SELECT * FROM Autenticacao WHERE Token = @Token and Ip=@Ip", new { Token = token, Ip = ip });
+            var user = new
+            {
                 UsuarioId = m.UsuarioId,
                 Usuario = m.Usuario,
                 Nome = m.Nome,
@@ -192,7 +204,7 @@ namespace LibLogin
             };
             await _db.GetConnection().ExecuteAsync("Delete from Autenticacao WHERE Token = @Token", new { Token = token });
             await _db.GetConnection().ExecuteAsync("INSERT INTO Autenticacao (UsuarioId, Usuario, Nome, Email, GrupoId, EmpresaId, DataHora, Token, Validade,Ip) VALUES (@UsuarioId, @Usuario, @Nome, @Email, @GrupoId, @EmpresaId, @DataHora, @Token, @Validade,@Ip)", user);
-            return new{token=user.Token,Validade=user.Validade};
+            return new { token = user.Token, Validade = user.Validade };
         }
 
         public async Task Revogar(string token)
@@ -200,4 +212,39 @@ namespace LibLogin
             await _db.GetConnection().ExecuteAsync("Delete from Autenticacao WHERE Token = @Token", new { Token = token });
         }
     }
+
+    public class UserRegister
+    {
+        public int UsuarioId { get; set; }
+        public string Usuario { get; set; }
+        public string Nome { get; set; }
+        public string Email { get; set; }
+        public int GrupoId { get; set; }
+        public int EmpresaId { get; set; }
+        public DateTime DataHora { get; set; } = DateTime.Now;
+        public string Token { get; set; } = Guid.NewGuid().ToString();
+        public DateTime Validade { get; set; }
+        public string Ip { get; set; }
+
+        public UserRegister(int usuarioId, string usuario, string nome, string email, int grupoId, int empresaId, int timeToken, string ip)
+        {
+            UsuarioId = usuarioId;
+            Usuario = usuario;
+            Nome = nome;
+            Email = email;
+            GrupoId = grupoId;
+            EmpresaId = empresaId;
+            Validade = DateTime.Now.AddHours(timeToken);
+            Ip = ip;
+        }
+    }
+
+    public class ServiceStatic{
+            private static Service service;
+            public static Service GetService(){
+                if(service==null)
+                    return new Service(true);
+                return service;
+            }
+        }
 }
