@@ -70,20 +70,8 @@ namespace LibLogin
 
             #endregion
 
-            #region Rotas
-            sql = @"CREATE TABLE IF NOT EXISTS Rotas (
-                Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                Nome TEXT NOT NULL,
-                EmpresaId TEXT NOT NULL
-            )";
-
-            await _db.GetConnection().ExecuteAsync(sql);
-
-            #endregion
-
             #region rotas
-            sql = @"DROP TABLE IF EXISTS Rotas";
-
+            
             await _db.GetConnection().ExecuteAsync(sql);
 
             sql = @"CREATE TABLE IF NOT EXISTS RotasAcessa (
@@ -135,6 +123,18 @@ namespace LibLogin
             }
 
             #endregion
+
+            #region rotas
+
+            sql = @"CREATE TABLE IF NOT EXISTS Rotas (
+                Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token TEXT NOT NULL,
+                rota TEXT NOT NULL
+            );";
+
+            await _db.GetConnection().ExecuteAsync(sql);
+
+            #endregion
         }
         public async Task<T> Registrar<T>(string id, string usuarioId, string usuario, string nome, string email, string grupoId, string empresaId, HttpContext context)
         {
@@ -165,7 +165,23 @@ namespace LibLogin
             return await _db.GetConnection().QueryFirstAsync<T>("SELECT * FROM Autenticacao Where Id=(SELECT MAX(Id) FROM Autenticacao)");
         }
 
-        public async Task<bool> Autorizado<T>(string token, HttpContext context)
+        public async Task RegistrarRotasBloqueadas(string[] rotas, string token)
+        {
+            string sql = "Delete from Rotas where token=@token";
+            await _db.GetConnection().ExecuteAsync(sql, new { token });
+
+            foreach (var rota in rotas)
+            {
+                await _db.GetConnection().ExecuteAsync("Insert into Rotas (token,rota) values(@token,@rota)", new { token, rota });
+            }
+        }
+        public async Task<bool> Autorizado(string rota, string token)
+        {
+            string sql = "select count(*) qtd from Rotas where token=@token and rota=@rota";
+            int qtd = await _db.GetConnection().QuerySingleAsync<int>(sql, new { token, rota });
+            return qtd==0;
+        }
+        public async Task<bool> Autenticado<T>(string token, HttpContext context)
         {
             string ip = context.Request.Headers["X-Forwarded-For"].FirstOrDefault()
                     ?? context.Connection.RemoteIpAddress?.ToString();
@@ -228,7 +244,7 @@ namespace LibLogin
 
         public UserRegister()
         {
-            
+
         }
         public UserRegister(string usuarioId, string usuario, string nome, string email, int grupoId, int empresaId, int timeToken, string ip)
         {
@@ -243,12 +259,14 @@ namespace LibLogin
         }
     }
 
-    public class ServiceStatic{
-            private static Service service;
-            public static Service GetService(){
-                if(service==null)
-                    return new Service(true);
-                return service;
-            }
+    public class ServiceStatic
+    {
+        private static Service service;
+        public static Service GetService()
+        {
+            if (service == null)
+                return new Service(true);
+            return service;
         }
+    }
 }
