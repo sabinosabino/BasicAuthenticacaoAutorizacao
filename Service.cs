@@ -215,7 +215,7 @@ namespace LibLogin
 
     public class UserRegister
     {
-        public int UsuarioId { get; set; }
+        public string UsuarioId { get; set; }
         public string Usuario { get; set; }
         public string Nome { get; set; }
         public string Email { get; set; }
@@ -230,7 +230,7 @@ namespace LibLogin
         {
             
         }
-        public UserRegister(int usuarioId, string usuario, string nome, string email, int grupoId, int empresaId, int timeToken, string ip)
+        public UserRegister(string usuarioId, string usuario, string nome, string email, int grupoId, int empresaId, int timeToken, string ip)
         {
             UsuarioId = usuarioId;
             Usuario = usuario;
